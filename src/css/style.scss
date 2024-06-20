@@ -316,3 +316,16 @@ body::-webkit-scrollbar {
   }
  }
 }
+
+.vimeo-player iframe {
+  width: 100%;
+  height: 100%;
+}
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
