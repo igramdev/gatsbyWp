@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useRef, useState, useEffect, Suspense } from "react";
-import { useIntersection, useDebounce } from "react-use";
+import { useIntersection, useDebounce, useMedia } from "react-use";
 import { ProjectsContext } from '../contexts/ProjectsContext';
 import { Link } from 'gatsby';
 import { GatsbyImage } from 'gatsby-plugin-image';
@@ -14,17 +14,13 @@ import { useSelectedValue } from '../contexts/SelectedValueContext';
 import Marquee from 'react-fast-marquee';
 import Star from "./star";
 import useScrollableMenu from './useScrollableMenu';
-import _ from "lodash";
 const fillColor = '#c9171e';
 
 
-const Vimeo = ({ videoId, onPlay=()=>{}, withFallback=true}) => {
+const Vimeo = ({ videoId, onPlay=()=>{}, quality='360p', withPlayer=true, withFallback=true}) => {
   const ref = useRef(null);
   const fallbackRef = useRef(null);
-  useEffect(() => {
-    if (!ref.current) {
-      return
-    }
+  const initPlayer = () => {
     const player = new VimeoPlayer(ref.current, {
       id: videoId,
       loop: true,
@@ -34,7 +30,7 @@ const Vimeo = ({ videoId, onPlay=()=>{}, withFallback=true}) => {
       controls: false,
       muted: true,
       autopause: false,
-      quality: '360p',
+      quality: quality,
       // background: true,
     });
     player.setVolume(0);
@@ -47,6 +43,12 @@ const Vimeo = ({ videoId, onPlay=()=>{}, withFallback=true}) => {
     player.on('play', () => {
       onPlay();
     });
+  }
+  useEffect(() => {
+    if (!ref.current || !withPlayer) {
+      return
+    }
+    initPlayer();
   }, []);
 
   return (
@@ -153,6 +155,9 @@ const Mosic = React.forwardRef(({ src, onLoaded=()=>{}, style={} }, ref) => {
 })
 
 const Thumbnail = ({ media, aspectRatio }) => {
+  const isSmallDevice = useMedia('(max-width: 768px)');
+  const vimeoProps = isSmallDevice ? { quality: '360p', withPlayer: false, withFallback: true } : { quality: '360p', withPlayer: true, withFallback: false };
+
   return (
     <div
       style={{
@@ -182,6 +187,7 @@ const Thumbnail = ({ media, aspectRatio }) => {
             videoId={media.id}
             onPlay={() => {
             }}
+            {...vimeoProps}
           />
         )
       }
@@ -189,41 +195,6 @@ const Thumbnail = ({ media, aspectRatio }) => {
     </div>
   )
 }
-const Marquee2 = ({ media, speed, children }) => {
-  return (
-    <div
-      style={{
-        height: '100%',
-        width: '100%',
-        position: 'relative',
-        display: 'flex',
-        flexWrap: 'nowrap',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          animation: `marquee ${speed}s linear infinite`,
-        }}
-      >
-      {children}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          animation: `marquee ${speed}s linear infinite`,
-        }}
-        aria-hidden="true"
-      >
-      {children}
-      </div>
-    </div>
-  )
-}
-
 
 const GalleryMarquee = React.memo(({ media, speed }) => {
   return (
