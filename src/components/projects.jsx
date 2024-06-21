@@ -6,9 +6,6 @@ import { GatsbyImage } from 'gatsby-plugin-image';
 
 /** vimeo player */
 import VimeoPlayer from '@vimeo/player';
-import { Splide, SplideSlide } from '@splidejs/react-splide';
-import { AutoScroll } from "@splidejs/splide-extension-auto-scroll";
-import '@splidejs/react-splide/css';
 
 import { Pixelify } from "react-pixelify";
 import parse from 'html-react-parser';
@@ -17,148 +14,87 @@ import { useSelectedValue } from '../contexts/SelectedValueContext';
 import Marquee from 'react-fast-marquee';
 import Star from "./star";
 import useScrollableMenu from './useScrollableMenu';
-import { get, set } from "lodash";
+import _ from "lodash";
 const fillColor = '#c9171e';
 
 
-const getVimeoThumbnail = async (videoId) => {
-  const response = await fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`);
-  const data = await response.json();
-  return data.thumbnail_url; // サムネイルのURLを返す
-};
-
-const PixelPhoto = React.memo(({ src, onRemove }) => {
-  const [pixelSize, setPixelSize] = useState(50); // 初期状態を50に設定
-  const [hasIntersected, setHasIntersected] = useState(false);
-  const intersectionRef = useRef(null);
-  const intersection = useIntersection(intersectionRef, {
-    root: null,
-    rootMargin: '0px',
-    threshold: .95 // 要素が完全にビューポートに入る前にアニメーションを開始
-  });
-
-  useEffect(() => {
-    if (intersection && intersection.isIntersecting) {
-      setHasIntersected(true); // 交差したことを記録
-      const pixelationSequence = [
-        { size: 30, delay: 100 },
-        { size: 15, delay: 150 },
-        { size: 0, delay: 200 },
-      ];
-
-      pixelationSequence.forEach(({ size, delay }) => {
-        setTimeout(() => {
-          setPixelSize(size);
-          if (size === 0) {
-            //onRemove();
-          }
-        }, delay);
-      });
-
-    } else {
-      // ビューポートに入る前に初期状態にリセット
-      setPixelSize(50);
-    }
-  }, [intersection, hasIntersected, onRemove]);
-
-  return (
-    <div ref={intersectionRef} className={projectStyles.pixel}>
-      <Pixelify
-        src={src}
-        width={250}
-        height={250}
-        centered={true}
-        pixelSize={pixelSize}
-      />
-    </div>
-  );
-}, (prevProps, nextProps) => {
-  return prevProps.src === nextProps.src && prevProps.onRemove === nextProps.onRemove;
-});
-
-
-/**
- *  Vimeoコンポーネント
- */
-const vimeoPlayers = (() => {
-  const _players = {
-    // videoId: player
-  };
-  const m = {
-    prepare: (videoId) => {
-      const dom = document.createElement('div');
-      dom.classList.add('vimeo-player');
-      dom.style.width = '100%';
-      dom.style.height = '100%';
-      const player = new VimeoPlayer(dom, {
-        id: videoId,
-        loop: true,
-        title: false,
-        byline: false,
-        portrait: false,
-        controls: false,
-        muted: true,
-        autopause: false,
-        quality: '360p',
-        background: true,
-      });
-      _players[videoId] = {
-        player,
-        dom,
-        playerOnPlay: (callback) => {
-          player.on('play', callback)
-        }
-      }
-      player.on('loaded', () => {
-        player.setVolume(0);
-        player.play();
-      });
-    },
-    get: (videoId, div) => {
-      // if (!_players[videoId]) {
-        m.prepare(videoId, div);
-      // }
-      return _players[videoId];
-    }
-  }
-  return m;
-})()
-const Vimeo = ({ videoId, onPlay=()=>{}}) => {
-  // return (
-  //   <iframe
-  //     src={`https://player.vimeo.com/video/${videoId}?autoplay=1&loop=1&title=0&byline=0&portrait=0&controls=0&muted=1&autopause=0`}
-  //     title=""
-  //     //loading="lazy"
-  //     frameBorder="0"
-  //     allow="autoplay;"
-  //     style={{
-  //       pointerEvents: 'none',
-  //       width: '100%',
-  //       height: '100%',
-  //       objectFit: 'cover',
-  //       objectPosition: 'center',
-  //     }}
-  //   ></iframe>
-  // );
+const Vimeo = ({ videoId, onPlay=()=>{}, withFallback=true}) => {
   const ref = useRef(null);
+  const fallbackRef = useRef(null);
   useEffect(() => {
-    const {dom, playerOnPlay} = vimeoPlayers.get(videoId);
-    playerOnPlay(onPlay);
-    ref.current.appendChild(dom);
+    if (!ref.current) {
+      return
+    }
+    const player = new VimeoPlayer(ref.current, {
+      id: videoId,
+      loop: true,
+      title: false,
+      byline: false,
+      portrait: false,
+      controls: false,
+      muted: true,
+      autopause: false,
+      quality: '360p',
+      // background: true,
+    });
+    player.setVolume(0);
+    player.on('loaded', () => {
+      player.play();
+      if (fallbackRef.current) {
+        fallbackRef.current.style.display = 'none';
+      }
+    });
+    player.on('play', () => {
+      onPlay();
+    });
   }, []);
 
   return (
     <div
+      ref={ref}
+      className="vimeo-player"
       style={{
         pointerEvents: 'none',
         width: '100%',
         height: '100%',
         position: 'relative',
       }}
-      ref={ref}
-    ></div>
+    >
+      {
+        withFallback && (
+          <VimeoFallback videoId={videoId} ref={fallbackRef} />
+        )
+      }
+    </div>
   )
 }
+const VimeoFallback = React.forwardRef(({ videoId }, ref)  => {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`)
+      .then(response => response.json())
+      .then(data => {
+        setSrc(data.thumbnail_url);
+      });
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+      }}
+    >
+      {src && (
+        <Mosic src={src} />
+      )}
+    </div>
+  )
+})
 
 const Mosic = React.forwardRef(({ src, onLoaded=()=>{}, style={} }, ref) => {
   const [pixelSize, setPixelSize] = useState(50);
@@ -217,53 +153,8 @@ const Mosic = React.forwardRef(({ src, onLoaded=()=>{}, style={} }, ref) => {
 })
 
 const Thumbnail = ({ media, aspectRatio }) => {
-  const [state, setState] = useState({
-    thumbnail: media.src,
-    loadingState: media.type === 'photo' ? 'thumbnailLoaded' : 'loading',
-  });
-  const ref = useRef(null);
-  const mosicRef = useRef(null);
-  const mediaRef = useRef(null);
-  useEffect(() => {
-    if ( media.type === 'video' ) {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-              fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${media.id}`)
-                .then(response => response.json())
-                .then(data => {
-                  setState({
-                    loadingState: 'thumbnailLoaded',
-                    thumbnail: data.thumbnail_url,
-                    intersectionOnce: true,
-                  });
-                });
-              observer.disconnect();
-          }
-        });
-      }, {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1,
-      });
-      observer.observe(ref.current);
-      return () => {
-        observer.disconnect();
-      }
-      // fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${media.id}`)
-      //   .then(response => response.json())
-      //   .then(data => {
-      //     setState({
-      //       loadingState: 'thumbnailLoaded',
-      //       thumbnail: data.thumbnail_url,
-      //     });
-      //   });
-    }
-  }, []);
-
   return (
     <div
-      ref={ref}
       style={{
         width: '100%',
         height: '100%',
@@ -272,41 +163,24 @@ const Thumbnail = ({ media, aspectRatio }) => {
       }}
       className={projectStyles.media}
     >
-      { state.loadingState === 'thumbnailLoaded' && (
-        <Mosic
-          src={state.thumbnail}
-          ref={mosicRef}
-          onLoaded={() => {
-            setTimeout(() => {
-              if (mosicRef.current) {
-                mosicRef.current.style.opacity = 0;
-                mediaRef.current.style.opacity = 1;
-              }
-            }, 3000);
-          }}
-        />
-      )}
-      <div ref={mediaRef} style={{
+      <div style={{
         width: '100%',
         height: '100%',
-        opacity: 0,
       }}>
       { media.type === 'photo' && (
-          <img
-            src={media.src}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+        <div className={projectStyles.photo}>
+          <GatsbyImage
+            image={media.src}
+            style={{ width: '100%', height: '100%', aspectRatio: aspectRatio }}
             alt={media.alt}
           />
+        </div>
         )
       }
       { media.type === 'video' && (
           <Vimeo 
             videoId={media.id}
             onPlay={() => {
-              if (mosicRef.current) {
-                mosicRef.current.style.opacity = 0;
-                mediaRef.current.style.opacity = 1;
-              }
             }}
           />
         )
@@ -352,28 +226,8 @@ const Marquee2 = ({ media, speed, children }) => {
 
 
 const GalleryMarquee = React.memo(({ media, speed }) => {
-  // const [thumbnails, setThumbnails] = useState({});
-  // const [showPixelPhoto, setShowPixelPhoto] = useState(true);
-
-  // const handleRemovePixelPhoto = () => {
-  //   setShowPixelPhoto(false);
-  // };
-
-  // useEffect(() => {
-  //   const fetchThumbnails = async () => {
-  //     const newThumbnails = {};
-  //     for (const item of media) {
-  //       if (item.mediaCheck === 'video' && item.shortVideo) {
-  //         const thumbnail = await getVimeoThumbnail(item.shortVideo);
-  //         newThumbnails[item.shortVideo] = thumbnail;
-  //       }
-  //     }
-  //     setThumbnails(newThumbnails);
-  //   };
-  //   fetchThumbnails();
-  // }, [media]);
   return (
-    <Marquee2 speed={speed} autoFill={true}>
+    <Marquee speed={speed} autoFill={true}>
       {
         media.map((item, index) => {
           const media = {
@@ -381,7 +235,7 @@ const GalleryMarquee = React.memo(({ media, speed }) => {
           }
           if (item.mediaCheck === 'photo') {
             media.alt = item.photo.node.altText || 'デフォルトのサイト名'
-            media.src = item.photo.node.localFile.childImageSharp.original.src
+            media.src = item.photo.node.localFile.childImageSharp.gatsbyImageData
           } else if (item.mediaCheck === 'video') {
             media.id = item.shortVideo;
           }
@@ -389,33 +243,11 @@ const GalleryMarquee = React.memo(({ media, speed }) => {
           return (item.viewCheck === 'view1' || item.viewCheck === 'view3') && (
             <div className={projectStyles.item} key={index}>
               <Thumbnail media={media} aspectRatio={item.aspectRatio} />
-              {/*
-              {item.mediaCheck === 'photo' && item.photo && (
-                <div style={{ width: '100%', height: '100%', position: 'relative' }} className={projectStyles.media}>
-                  <div className={projectStyles.photo}>
-
-                    <GatsbyImage
-                      image={item.photo.node.localFile.childImageSharp.gatsbyImageData}
-                      style={{ width: '100%', height: '100%' }}
-                      alt={item.photo.node.altText || 'デフォルトのサイト名'} />
-                    {showPixelPhoto && <PixelPhoto src={item.photo.node.localFile.childImageSharp.original.src} onRemove={handleRemovePixelPhoto} />}
-                  </div>
-                </div>
-              )}
-              {item.mediaCheck === 'video' && item.shortVideo && (
-                <div style={{ width: '100%', height: '100%', position: 'relative' }} className={projectStyles.media}>
-                  <div className={projectStyles.video} style={{ aspectRatio: item.aspectRatio }}>
-                    <Vimeo videoId={item.shortVideo} />
-                    {showPixelPhoto && <PixelPhoto src={thumbnails[item.shortVideo]} onRemove={handleRemovePixelPhoto} />}
-                  </div>
-                </div>
-              )}
-              */}
             </div>
           )
         })
       }
-    </Marquee2>
+    </Marquee>
   );
 })
 
